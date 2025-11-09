@@ -128,7 +128,6 @@ async function remove(id: string) {
     <div className="space-y-8">
       <header>
         <h1 className="text-2xl font-bold">Admin · Gallery</h1>
-        <p className="text-sm text-slate-500">추억 저장소에 항목을 추가/삭제합니다.</p>
       </header>
 
       {/* 작성 폼 */}

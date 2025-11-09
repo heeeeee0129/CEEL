@@ -1,56 +1,50 @@
 // app/api/gallery/[id]/route.ts
-import { NextResponse, NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { adb } from "@/firebase/firebaseAdmin";
-import { GalleryItem } from "@/types/gallery";
 
 export const runtime = "nodejs";
 
 const col = () => adb.collection("gallery");
-type FireGallery = Omit<GalleryItem, "id">;
 
-function getId(req: NextRequest, ctx?: { params?: Record<string, string> }): string | null {
-  const fromParams = ctx?.params?.id;
-  if (fromParams) {
-    // Be tolerant: id | docId | slug
-    return fromParams;
-  }
+// Turbopack/validator가 기대하는 시그니처: params 는 Promise<{id:string}>
+type ParamCtx = { params: Promise<{ id: string }> };
+
+export async function PATCH(req: NextRequest, { params }: ParamCtx) {
   try {
-    const url = new URL(req.url);
-    const segs = url.pathname.split("/").filter(Boolean);
-    return segs[segs.length - 1] ?? null; // /api/gallery/:id
-  } catch {
-    return null;
-  }
-}
+    const { id } = await params;                // ← 반드시 await
+    const docId = decodeURIComponent(id);
 
-export async function PATCH(req: NextRequest, ctx: { params?: {id?: string} }) {
-  try {
-    const id = getId(req, ctx);
-    if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
+    const body = await req.json();              // 부분 업데이트 허용
+    await col().doc(docId).set(
+      { ...body, updatedAt: new Date().toISOString() },
+      { merge: true }
+    );
 
-    const body = (await req.json()) as Partial<GalleryItem>;
-    await col().doc(id).set({ ...(body as FireGallery), updatedAt: new Date() }, { merge: true });
-    const snap = await col().doc(id).get();
-    if (!snap.exists) return NextResponse.json({ error: "Not Found" }, { status: 404 });
+    const snap = await col().doc(docId).get();
+    if (!snap.exists) {
+      return NextResponse.json({ error: "Not Found" }, { status: 404 });
+    }
 
-    return NextResponse.json({ id: snap.id, ...(snap.data() as FireGallery) });
+    return NextResponse.json({ id: snap.id, ...snap.data() });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     console.error("PATCH /api/gallery/[id] error:", e);
     return NextResponse.json({ error: msg }, { status: 500 });
   }
-} 
+}
 
-export async function DELETE(req: NextRequest, ctx: { params?: {id?: string} }) {
+export async function DELETE(_req: NextRequest, { params }: ParamCtx) {
   try {
-    const id = getId(req, ctx);
-    if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
+    const { id } = await params;                // ← 반드시 await
+    const docId = decodeURIComponent(id);
 
-    const docRef = col().doc(id);
-    const snap = await docRef.get();
-    if (!snap.exists) return NextResponse.json({ error: "Not Found" }, { status: 404 });
+    const ref = col().doc(docId);
+    const snap = await ref.get();
+    if (!snap.exists) {
+      return NextResponse.json({ error: "Not Found" }, { status: 404 });
+    }
 
-    await docRef.delete();
+    await ref.delete();
     return new NextResponse(null, { status: 204 });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);

@@ -1,35 +1,26 @@
 // app/api/peer/[id]/route.ts
 export const runtime = "nodejs";
 
-import { NextResponse, NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import type { Peer } from "@/types/peer";
 import { adb } from "@/firebase/firebaseAdmin";
 
 const col = () => adb.collection("peers");
 type FirePeer = Omit<Peer, "id">;
 
-// 공통: params가 비면 URL에서 마지막 세그먼트로 폴백
-function getId(req: NextRequest, ctx?: { params?: { id?: string } }): string | null {
-  const fromParams = ctx?.params?.id;
-  if (fromParams) return fromParams;
+// PATCH /api/peer/:id
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const url = new URL(req.url);
-    const segs = url.pathname.split("/").filter(Boolean);
-    return segs[segs.length - 1] ?? null; // /api/peer/:id
-  } catch {
-    return null;
-  }
-}
-
-export async function PATCH(req: NextRequest, ctx: { params?: { id?: string } }) {
-  try {
-    const id = getId(req, ctx);
-    if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
+    const { id } = await params;                       // ✅ 반드시 await
+    const docId = decodeURIComponent(id);
 
     const body = (await req.json()) as Partial<Peer>;
-    await col().doc(id).set({ ...(body as FirePeer), updatedAt: new Date() }, { merge: true });
+    await col().doc(docId).set(
+      { ...(body as FirePeer), updatedAt: new Date().toISOString() },
+      { merge: true }
+    );
 
-    const snap = await col().doc(id).get();
+    const snap = await col().doc(docId).get();
     if (!snap.exists) return NextResponse.json({ error: "Not Found" }, { status: 404 });
 
     return NextResponse.json({ id: snap.id, ...(snap.data() as FirePeer) });
@@ -40,16 +31,17 @@ export async function PATCH(req: NextRequest, ctx: { params?: { id?: string } })
   }
 }
 
-export async function DELETE(req: NextRequest, ctx: { params?: { id?: string } }) {
+// DELETE /api/peer/:id
+export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const id = getId(req, ctx);
-    if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
+    const { id } = await params;                       // ✅ 반드시 await
+    const docId = decodeURIComponent(id);
 
-    const docRef = col().doc(id);
-    const snap = await docRef.get();
+    const ref = col().doc(docId);
+    const snap = await ref.get();
     if (!snap.exists) return NextResponse.json({ error: "Not Found" }, { status: 404 });
 
-    await docRef.delete();
+    await ref.delete();
     return new NextResponse(null, { status: 204 });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
