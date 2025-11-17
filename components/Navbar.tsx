@@ -26,20 +26,35 @@ const staggerList: Variants = { hidden: {}, show: { transition: { staggerChildre
 export function Navbar() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  const [compact, setCompact] = useState(false);
   const reduceMotion = useReducedMotion();
 
   // ✅ hydration 이후에만 스크롤 상태 동기화 (SSR과 className 불일치 방지)
+ const [compact, setCompact] = useState(false);
+
   useEffect(() => {
     let raf = 0;
+
     const onScroll = () => {
       if (raf) return;
       raf = requestAnimationFrame(() => {
-        setCompact(window.scrollY > 12);
+        const y = window.scrollY || window.pageYOffset;
+
+        setCompact((prev) => {
+          // compact 아님 → 일정 이상 내려가면 compact 진입
+          if (!prev && y > 32) return true;
+          // compact 상태 → 거의 맨 위까지 올라오면 해제
+          if (prev && y < 8) return false;
+          // 중간 영역에서는 기존 상태 유지 (토글 방지)
+          return prev;
+        });
+
         raf = 0;
       });
     };
+
+    // 초기 1회 호출로 새로고침 시 상태 맞추기
     onScroll();
+
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => {
       window.removeEventListener("scroll", onScroll);
